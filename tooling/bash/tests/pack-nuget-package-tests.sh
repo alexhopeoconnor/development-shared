@@ -29,20 +29,37 @@ cat > "$TEST_ROOT/Example.csproj" <<'EOF'
 EOF
 cat > "$TEST_ROOT/bin/dotnet" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${SOURCE_ONLY_PHASE:-false}" == true ]]; then
+  printf 'dotnet %s\n' "$*" >> "$SOURCE_TOOL_LOG"
+  exit 97
+fi
 printf '%s\n' "$*" >> "$DOTNET_LOG"
 EOF
 chmod +x "$TEST_ROOT/bin/dotnet"
+for tool in git docker; do
+  cat > "$TEST_ROOT/bin/$tool" <<'EOF'
+#!/usr/bin/env bash
+printf '%s %s\n' "$(basename "$0")" "$*" >> "$SOURCE_TOOL_LOG"
+exit 97
+EOF
+  chmod +x "$TEST_ROOT/bin/$tool"
+done
 
 # Loading each public entrypoint must not execute a tool or overwrite a
 # consumer's unscoped SCRIPT_DIR variable.
+SOURCE_TOOL_LOG="$TEST_ROOT/source-tools.log"
+export SOURCE_TOOL_LOG
+export SOURCE_ONLY_PHASE=true
+export PATH="$TEST_ROOT/bin:$PATH"
 SCRIPT_DIR='consumer-owned-script-dir'
 source "$REPO_ROOT/tooling/bash/lib/versioning.sh"
 source "$REPO_ROOT/tooling/bash/lib/release-source.sh"
 source "$REPO_ROOT/tooling/bash/lib/docker-image.sh"
 source "$PACKER"
+unset SOURCE_ONLY_PHASE
 [[ "$SCRIPT_DIR" == consumer-owned-script-dir ]] || fail 'sourcing packer overwrote caller SCRIPT_DIR'
 [[ -z "${DEVELOPMENT_SHARED_BUILT_DOCKER_IMAGE_ID:-}" ]] || fail 'sourcing image library set a build identity'
-[[ ! -e "$TEST_ROOT/source.log" ]] || fail 'sourcing public entrypoints invoked a tool'
+[[ ! -s "$SOURCE_TOOL_LOG" ]] || fail 'sourcing public entrypoints invoked a tool'
 
 validate_package_version 1.2.3
 validate_image_version 1.2.3-rc.1
