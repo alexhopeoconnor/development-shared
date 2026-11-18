@@ -1,0 +1,9 @@
+# Locally produced package output
+artifacts/
+*.nupkg
+*.snupkg
+
+# Local configuration that can contain credentials
+.env
+.env.*
+NuGet.Config
